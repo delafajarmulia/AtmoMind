@@ -18,9 +18,8 @@ Before you begin, ensure you have the following installed:
 First, open your terminal (Command Prompt, PowerShell, or Terminal) and clone the repository from GitHub:
 
 ```bash
-git clone <YOUR_GITHUB_REPOSITORY_URL_HERE>
+git clone https://github.com/delafajarmulia/AtmoMind.git
 ```
-*(Note: Replace `<YOUR_GITHUB_REPOSITORY_URL_HERE>` with the actual URL of your repository. If you already have it downloaded, you can skip to Step 2)*
 
 ### Step 2: Navigate to the Project Directory
 
@@ -37,8 +36,6 @@ Create a new environment configuration file by copying the provided example. You
 ```bash
 cp .env.example .env
 ```
-
-*(Note: On Windows Command Prompt, use `copy .env.example .env` instead)*
 
 Once copied, open the new `.env` file in your code editor and fill in any required missing values (such as your Supabase keys).
 
