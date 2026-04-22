@@ -1,8 +1,17 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #faf8f5;
+  --foreground: #2d2a26;
+  --gold: #f0a500;
+  --gold-light: #ffd54f;
+  --gold-bg: rgba(240, 165, 0, 0.08);
+  --red-soft: #e63946;
+  --red-light: #ff8a95;
+  --red-bg: rgba(230, 57, 70, 0.08);
+  --card-bg: #ffffff;
+  --card-border: rgba(240, 165, 0, 0.15);
+  --muted: #9a9590;
 }
 
 @theme inline {
@@ -12,15 +21,47 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), "Segoe UI", Arial, sans-serif;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--gold-light);
+  border-radius: 999px;
+}
+
+/* Smooth animations */
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fadeUp 0.5s ease-out both;
+}
+
+.animate-fade-up-delay {
+  animation: fadeUp 0.5s ease-out 0.15s both;
+}
+
+.animate-fade-up-delay-2 {
+  animation: fadeUp 0.5s ease-out 0.3s both;
 }
