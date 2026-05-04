@@ -54,7 +54,11 @@ export default function Home() {
           }));
 
           historyData.forEach((row) => {
-            const hour = new Date(row.created_at).getHours();
+            const rowTime = new Date(row.created_at);
+            const hour = parseInt(
+              new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Jakarta", hour: "numeric", hourCycle: "h23" }).format(rowTime),
+              10
+            );
             hourlyBuckets[hour].temps.push(row.suhu);
             hourlyBuckets[hour].humids.push(row.kelembapan);
           });
@@ -109,7 +113,18 @@ export default function Home() {
   const latestData = data[0] || { suhu: 29.5, kelembapan: 75, cahaya: 620 };
 
   const ldrValue = latestData.cahaya ?? 0;
-  const isDaytime = ldrValue > 500;
+
+  // Tentukan Siang/Malam berdasarkan waktu data (GMT+7)
+  const dataTime = latestData.created_at ? new Date(latestData.created_at) : new Date();
+  const hourGmt7 = parseInt(
+    new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Jakarta", hour: "numeric", hourCycle: "h23" }).format(dataTime),
+    10
+  );
+  const isDaytime = hourGmt7 >= 6 && hourGmt7 < 18;
+
+  // Tulisan terang/gelap by default ambil dari DB, fallback ke ldrValue jika tidak ada
+  const dbKondisi = latestData.kondisi || latestData.keterangan || latestData.status;
+  const kondisiCahaya = dbKondisi ? String(dbKondisi).toLowerCase() : (ldrValue > 500 ? "terang" : "gelap");
 
   const tabs = [
     { key: "dashboard", label: "Dashboard", gradient: "linear-gradient(135deg, #f0a500, #f5bc30)", shadow: "rgba(240,165,0,0.35)" },
@@ -319,8 +334,7 @@ export default function Home() {
 
                 <div className="mt-5">
                   <div className="flex justify-between text-xs mb-2" style={{ color: "#9a9590" }}>
-                    <span>Gelap</span>
-                    <span>Terang</span>
+                    <span>{kondisiCahaya}</span>
                   </div>
                   <div className="w-full h-3 rounded-full overflow-hidden" style={{ background: "rgba(0,0,0,0.04)" }}>
                     <div
@@ -336,7 +350,7 @@ export default function Home() {
                 <div className="mt-4 pt-4 flex items-center gap-2" style={{ borderTop: "1px solid rgba(184,134,11,0.12)" }}>
                   <div className="w-1.5 h-1.5 rounded-full" style={{ background: "#b8860b", boxShadow: "0 0 8px rgba(184,134,11,0.5)" }}></div>
                   <span className="text-xs" style={{ color: "#9a9590" }}>
-                    {isDaytime ? "Kondisi terang — siang hari" : "Kondisi gelap — malam hari"}
+                    Kondisi {kondisiCahaya} — {isDaytime ? "siang" : "malam"} hari
                   </span>
                 </div>
               </div>
@@ -418,6 +432,7 @@ export default function Home() {
                   history.map((row, i) => {
                     const time = new Date(row.created_at);
                     const formattedTime = time.toLocaleString("id-ID", {
+                      timeZone: "Asia/Jakarta",
                       day: "2-digit",
                       month: "short",
                       year: "numeric",
