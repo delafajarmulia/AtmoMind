@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "../utils/supabase";
 import dynamic from "next/dynamic";
 
@@ -25,6 +25,15 @@ export default function Home() {
   const [temp24h, setTemp24h] = useState(MOCK_TEMP_24H);
   const [humid24h, setHumid24h] = useState(MOCK_HUMID_24H);
   const [history, setHistory] = useState([]);
+
+  // ─── State untuk filter tanggal & export ───
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [filteredHistory, setFilteredHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyCount, setHistoryCount] = useState(null);
+  const [exportingPDF, setExportingPDF] = useState(false);
+  const [exportingExcel, setExportingExcel] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -109,6 +118,60 @@ export default function Home() {
 
     return () => supabase.removeChannel(channel);
   }, []);
+
+  // ─── Fetch data berdasarkan rentang tanggal ───
+  const fetchFilteredHistory = useCallback(async () => {
+    if (!startDate || !endDate) return;
+    setHistoryLoading(true);
+    setHistoryCount(null);
+    try {
+      const startISO = new Date(startDate + "T00:00:00+07:00").toISOString();
+      const endISO = new Date(endDate + "T23:59:59+07:00").toISOString();
+
+      const { data: result, error: err } = await supabase
+        .from("sensor_data")
+        .select("*")
+        .gte("created_at", startISO)
+        .lte("created_at", endISO)
+        .order("created_at", { ascending: true });
+
+      if (err) throw err;
+      setFilteredHistory(result || []);
+      setHistoryCount(result ? result.length : 0);
+    } catch (err) {
+      console.error("Error fetching filtered history:", err);
+      setFilteredHistory([]);
+      setHistoryCount(0);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [startDate, endDate]);
+
+  const handleExportPDF = async () => {
+    if (filteredHistory.length === 0) return;
+    setExportingPDF(true);
+    try {
+      const { generatePDF } = await import("./components/ExportPDF");
+      generatePDF(filteredHistory, startDate, endDate);
+    } catch (err) {
+      console.error("Error generating PDF:", err);
+    } finally {
+      setExportingPDF(false);
+    }
+  };
+
+  const handleExportExcel = async () => {
+    if (filteredHistory.length === 0) return;
+    setExportingExcel(true);
+    try {
+      const { generateExcel } = await import("./components/ExportExcel");
+      generateExcel(filteredHistory, startDate, endDate);
+    } catch (err) {
+      console.error("Error generating Excel:", err);
+    } finally {
+      setExportingExcel(false);
+    }
+  };
 
   const latestData = data[0] || { suhu: 29.5, kelembapan: 75, cahaya: 620 };
 
@@ -403,33 +466,167 @@ export default function Home() {
         {/* ═══════ MODE: HISTORY ═══════ */}
         {/* ══════════════════════════════════════════════ */}
         {mode === "history" && (
-          <div className="space-y-8">
+          <div className="space-y-6">
             <div className="animate-fade-up">
               <h2 className="text-3xl md:text-4xl font-bold tracking-tight" style={{ color: "#f0a500" }}>
                 Riwayat <span style={{ color: "#272828ff" }}>Bacaan Sensor</span>
               </h2>
               <p className="mt-2 text-base" style={{ color: "#4a4642" }}>
-                50 data terakhir yang dikirim oleh sensor ke database
+                Pilih rentang tanggal untuk melihat dan mengekspor data sensor
               </p>
             </div>
 
+            {/* ── Date Range Picker & Export Buttons ── */}
             <div
-              className="rounded-3xl overflow-hidden animate-fade-up-delay"
-              style={{ background: "#fff", border: "1px solid rgba(107,138,122,0.12)", boxShadow: "0 1px 3px rgba(0,0,0,0.03), 0 8px 32px rgba(107,138,122,0.06)" }}
+              className="rounded-3xl p-6 animate-fade-up-delay"
+              style={{ background: "#fff", border: "1px solid rgba(240,165,0,0.15)", boxShadow: "0 1px 3px rgba(0,0,0,0.03), 0 8px 32px rgba(240,165,0,0.06)" }}
             >
-              <div
-                className="grid grid-cols-4 gap-4 px-6 py-4 text-xs font-bold uppercase tracking-wider"
-                style={{ background: "rgba(107,138,122,0.05)", color: "#2d2a26", borderBottom: "1px solid rgba(107,138,122,0.1)" }}
-              >
-                <span>Waktu</span>
-                <span className="text-center">Suhu (°C)</span>
-                <span className="text-center">Kelembapan (%)</span>
-                <span className="text-center">Cahaya (LDR)</span>
+              <div className="flex flex-col md:flex-row items-start md:items-end gap-4">
+                <div className="flex-1 w-full">
+                  <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "#9a9590" }}>Dari Tanggal</label>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 outline-none"
+                    style={{ background: "rgba(240,165,0,0.06)", border: "1px solid rgba(240,165,0,0.2)", color: "#2d2a26" }}
+                    onFocus={(e) => e.target.style.borderColor = "rgba(240,165,0,0.5)"}
+                    onBlur={(e) => e.target.style.borderColor = "rgba(240,165,0,0.2)"}
+                  />
+                </div>
+                <div className="flex-1 w-full">
+                  <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "#9a9590" }}>Sampai Tanggal</label>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 outline-none"
+                    style={{ background: "rgba(240,165,0,0.06)", border: "1px solid rgba(240,165,0,0.2)", color: "#2d2a26" }}
+                    onFocus={(e) => e.target.style.borderColor = "rgba(240,165,0,0.5)"}
+                    onBlur={(e) => e.target.style.borderColor = "rgba(240,165,0,0.2)"}
+                  />
+                </div>
+                <button
+                  onClick={fetchFilteredHistory}
+                  disabled={!startDate || !endDate || historyLoading}
+                  className="px-6 py-3 rounded-xl text-sm font-semibold text-white transition-all duration-300 hover:translate-y-[-1px] disabled:opacity-40 disabled:cursor-not-allowed"
+                  style={{ background: "linear-gradient(135deg, #f0a500, #e6950a)", boxShadow: "0 2px 12px rgba(240,165,0,0.35)" }}
+                >
+                  {historyLoading ? (
+                    <span className="flex items-center gap-2">
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                      Mencari...
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                      Cari Data
+                    </span>
+                  )}
+                </button>
               </div>
 
-              <div className="max-h-[480px] overflow-y-auto">
-                {history.length > 0 ? (
-                  history.map((row, i) => {
+              {/* Export Buttons */}
+              {filteredHistory.length > 0 && (
+                <div className="flex flex-wrap items-center gap-3 mt-5 pt-5" style={{ borderTop: "1px solid rgba(240,165,0,0.1)" }}>
+                  <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#9a9590" }}>Export:</span>
+                  <button
+                    onClick={handleExportPDF}
+                    disabled={exportingPDF}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 hover:translate-y-[-1px] disabled:opacity-50"
+                    style={{ background: "rgba(230,57,70,0.08)", color: "#e63946", border: "1px solid rgba(230,57,70,0.2)" }}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
+                    {exportingPDF ? "Membuat PDF..." : "📄 Export PDF"}
+                  </button>
+                  <button
+                    onClick={handleExportExcel}
+                    disabled={exportingExcel}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 hover:translate-y-[-1px] disabled:opacity-50"
+                    style={{ background: "rgba(34,139,34,0.08)", color: "#228b22", border: "1px solid rgba(34,139,34,0.2)" }}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                    {exportingExcel ? "Membuat Excel..." : "📊 Export Excel"}
+                  </button>
+                  <span className="ml-auto text-xs" style={{ color: "#9a9590" }}>
+                    {filteredHistory.length} data siap diexport
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* ── Result Info ── */}
+            {historyCount !== null && (
+              <div
+                className="flex items-center gap-3 px-5 py-3 rounded-2xl text-sm font-medium animate-fade-up"
+                style={{
+                  background: filteredHistory.length > 0 ? "rgba(107,138,122,0.06)" : "rgba(230,57,70,0.06)",
+                  border: `1px solid ${filteredHistory.length > 0 ? "rgba(107,138,122,0.18)" : "rgba(230,57,70,0.18)"}`,
+                  color: filteredHistory.length > 0 ? "#6b8a7a" : "#e63946",
+                }}
+              >
+                {filteredHistory.length > 0 ? (
+                  <>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    Ditemukan <strong>{filteredHistory.length}</strong> pembacaan sensor dalam rentang tanggal yang dipilih
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    Tidak ada data dalam rentang tanggal yang dipilih
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* ── Ringkasan Statistik ── */}
+            {filteredHistory.length > 0 && (() => {
+              const temps = filteredHistory.map(r => r.suhu).filter(v => v != null);
+              const humids = filteredHistory.map(r => r.kelembapan).filter(v => v != null);
+              return (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-fade-up-delay">
+                  {[
+                    { label: "Suhu Min", value: temps.length > 0 ? `${Math.min(...temps)}°C` : "-", color: "#e63946", bg: "rgba(230,57,70,0.06)" },
+                    { label: "Suhu Maks", value: temps.length > 0 ? `${Math.max(...temps)}°C` : "-", color: "#e63946", bg: "rgba(230,57,70,0.06)" },
+                    { label: "Suhu Rata-rata", value: temps.length > 0 ? `${(temps.reduce((a,b)=>a+b,0)/temps.length).toFixed(1)}°C` : "-", color: "#e63946", bg: "rgba(230,57,70,0.06)" },
+                    { label: "Total Pembacaan", value: `${filteredHistory.length}`, color: "#6b8a7a", bg: "rgba(107,138,122,0.06)" },
+                    { label: "Kelembapan Min", value: humids.length > 0 ? `${Math.min(...humids)}%` : "-", color: "#3b82f6", bg: "rgba(59,130,246,0.06)" },
+                    { label: "Kelembapan Maks", value: humids.length > 0 ? `${Math.max(...humids)}%` : "-", color: "#3b82f6", bg: "rgba(59,130,246,0.06)" },
+                    { label: "Kelembapan Rata-rata", value: humids.length > 0 ? `${(humids.reduce((a,b)=>a+b,0)/humids.length).toFixed(1)}%` : "-", color: "#3b82f6", bg: "rgba(59,130,246,0.06)" },
+                    { label: "Rentang Periode", value: `${Math.ceil((new Date(endDate) - new Date(startDate)) / (1000*60*60*24)) + 1} hari`, color: "#b8860b", bg: "rgba(184,134,11,0.06)" },
+                  ].map((stat) => (
+                    <div
+                      key={stat.label}
+                      className="rounded-2xl p-4 text-center transition-all duration-300 hover:translate-y-[-2px]"
+                      style={{ background: "#fff", border: `1px solid ${stat.bg}`, boxShadow: `0 4px 16px ${stat.bg}` }}
+                    >
+                      <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#9a9590" }}>{stat.label}</p>
+                      <p className="text-xl font-bold mt-1" style={{ color: stat.color }}>{stat.value}</p>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+
+            {/* ── Tabel Data ── */}
+            {filteredHistory.length > 0 && (
+              <div
+                className="rounded-3xl overflow-hidden animate-fade-up-delay-2"
+                style={{ background: "#fff", border: "1px solid rgba(107,138,122,0.12)", boxShadow: "0 1px 3px rgba(0,0,0,0.03), 0 8px 32px rgba(107,138,122,0.06)" }}
+              >
+                <div
+                  className="grid grid-cols-5 gap-4 px-6 py-4 text-xs font-bold uppercase tracking-wider"
+                  style={{ background: "rgba(107,138,122,0.05)", color: "#2d2a26", borderBottom: "1px solid rgba(107,138,122,0.1)" }}
+                >
+                  <span>No</span>
+                  <span>Waktu</span>
+                  <span className="text-center">Suhu (°C)</span>
+                  <span className="text-center">Kelembapan (%)</span>
+                  <span className="text-center">Cahaya (LDR)</span>
+                </div>
+
+                <div className="max-h-[480px] overflow-y-auto">
+                  {filteredHistory.map((row, i) => {
                     const time = new Date(row.created_at);
                     const formattedTime = time.toLocaleString("id-ID", {
                       timeZone: "Asia/Jakarta",
@@ -444,7 +641,7 @@ export default function Home() {
                     return (
                       <div
                         key={row.id || i}
-                        className="grid grid-cols-4 gap-4 px-6 py-3.5 text-sm transition-colors duration-200"
+                        className="grid grid-cols-5 gap-4 px-6 py-3.5 text-sm transition-colors duration-200"
                         style={{
                           borderBottom: "1px solid rgba(0,0,0,0.03)",
                           background: i % 2 === 0 ? "transparent" : "rgba(107,138,122,0.02)",
@@ -452,24 +649,32 @@ export default function Home() {
                         onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(240,165,0,0.04)")}
                         onMouseLeave={(e) => (e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "rgba(107,138,122,0.02)")}
                       >
+                        <span className="font-medium" style={{ color: "#9a9590" }}>{i + 1}</span>
                         <span className="font-medium" style={{ color: "#2d2a26" }}>{formattedTime}</span>
                         <span className="text-center font-semibold" style={{ color: "#e63946" }}>{row.suhu ?? "-"}</span>
                         <span className="text-center font-semibold" style={{ color: "#3b82f6" }}>{row.kelembapan ?? "-"}</span>
                         <span className="text-center font-semibold" style={{ color: "#b8860b" }}>{row.cahaya ?? "-"}</span>
                       </div>
                     );
-                  })
-                ) : (
-                  <div className="px-6 py-12 text-center" style={{ color: "#4a4642" }}>
-                    <svg className="w-12 h-12 mx-auto mb-4 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-                    </svg>
-                    <p className="font-medium">Belum ada data riwayat</p>
-                    <p className="text-xs mt-1">Data akan muncul setelah sensor mengirim pembacaan ke tabel sensor_data di Supabase</p>
-                  </div>
-                )}
+                  })}
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* ── Empty State (belum cari) ── */}
+            {historyCount === null && (
+              <div
+                className="rounded-3xl p-12 text-center animate-fade-up-delay"
+                style={{ background: "#fff", border: "1px solid rgba(107,138,122,0.12)" }}
+              >
+                <svg className="w-16 h-16 mx-auto mb-4 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <p className="font-semibold text-lg" style={{ color: "#2d2a26" }}>Pilih Rentang Tanggal</p>
+                <p className="text-sm mt-2" style={{ color: "#9a9590" }}>Tentukan tanggal mulai dan akhir, lalu klik "Cari Data" untuk melihat riwayat sensor</p>
+                <p className="text-xs mt-4" style={{ color: "#c4bfb9" }}>Data bisa langsung diekspor ke PDF atau Excel setelah ditemukan</p>
+              </div>
+            )}
           </div>
         )}
       </div>
